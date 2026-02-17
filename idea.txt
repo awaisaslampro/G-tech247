@@ -1,3 +1,29 @@
+//        ADMIN LOGIN
+
+http://localhost:3000/admin/login
+
+
+
+
+=================================================================================================
+=================================================================================================
+Kill any leftover Node processes:
+=================================
+Get-Process node -ErrorAction SilentlyContinue | Stop-Process -Force
+
+Then
+
+How to clear cache
+==================
+Remove-Item -Recurse -Force .next
+
+
+=================================================================================================
+=================================================================================================
+
+
+
+
 i want to build a company-based website where someone can apply for job 
 like add personal data and drop CV. and on backend i can see who has applied 
 and how many persons have applied i can also see the admin portal.

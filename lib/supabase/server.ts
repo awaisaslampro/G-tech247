@@ -11,15 +11,17 @@ function getRequiredEnv(name: string): string {
 export function getServiceSupabaseClient() {
   const url = getRequiredEnv("NEXT_PUBLIC_SUPABASE_URL");
   const key = getRequiredEnv("SUPABASE_SERVICE_ROLE_KEY");
+
   return createClient(url, key, {
     auth: {
-      persistSession: false
-    }
+      persistSession: false,
+    },
   });
 }
 
 export function getAnonSupabaseClient() {
   const url = getRequiredEnv("NEXT_PUBLIC_SUPABASE_URL");
   const key = getRequiredEnv("NEXT_PUBLIC_SUPABASE_ANON_KEY");
+
   return createClient(url, key);
 }
