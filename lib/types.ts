@@ -3,6 +3,10 @@ export type ApplicationRow = {
   full_name: string;
   email: string;
   phone: string;
+  city: string | null;
+  years_of_experience: number | null;
+  country_covered: string | null;
+  cities_covered: string[] | null;
   position: string;
   cover_letter: string | null;
   cv_path: string;

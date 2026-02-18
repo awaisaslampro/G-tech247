@@ -14,6 +14,45 @@ function normalizeParam(value: string | string[] | undefined): string {
   return Array.isArray(value) ? value[0] || "" : value || "";
 }
 
+function getMissingSchemaColumn(errorMessage: string): string | null {
+  const schemaCacheMatch = errorMessage.match(
+    /Could not find the '([^']+)' column of 'applications' in the schema cache/i
+  );
+  if (schemaCacheMatch?.[1]) {
+    return schemaCacheMatch[1];
+  }
+
+  const tableColumnMatch = errorMessage.match(
+    /column\s+(?:"?applications"?\.)?"?([a-zA-Z0-9_]+)"?\s+does not exist/i
+  );
+  if (tableColumnMatch?.[1]) {
+    return tableColumnMatch[1];
+  }
+
+  return null;
+}
+
+const BASE_APPLICATION_SELECT_COLUMNS = [
+  "id",
+  "full_name",
+  "email",
+  "phone",
+  "position",
+  "cover_letter",
+  "cv_path",
+  "cv_file_name",
+  "identity_document_path",
+  "identity_document_file_name",
+  "created_at"
+];
+
+const OPTIONAL_APPLICATION_COLUMNS = [
+  "city",
+  "years_of_experience",
+  "country_covered",
+  "cities_covered"
+];
+
 export default async function AdminPage({ searchParams }: AdminPageProps) {
   const isAllowed = await isAdminAuthenticated();
   if (!isAllowed) {
@@ -25,32 +64,79 @@ export default async function AdminPage({ searchParams }: AdminPageProps) {
   const position = normalizeParam(params.position).trim();
 
   const supabase = getServiceSupabaseClient();
-  let query = supabase
-    .from("applications")
-    .select(
-      "id, full_name, email, phone, position, cover_letter, cv_path, cv_file_name, identity_document_path, identity_document_file_name, created_at",
-      {
+  let selectColumns = [...BASE_APPLICATION_SELECT_COLUMNS, ...OPTIONAL_APPLICATION_COLUMNS];
+  let applicants: ApplicationRow[] = [];
+  let totalCount = 0;
+  let loaded = false;
+
+  for (let attempt = 0; attempt <= OPTIONAL_APPLICATION_COLUMNS.length; attempt += 1) {
+    let query = supabase
+      .from("applications")
+      .select(selectColumns.join(", "), {
         count: "exact"
-      }
-    )
-    .order("created_at", { ascending: false });
+      })
+      .order("created_at", { ascending: false });
 
-  if (position) {
-    query = query.eq("position", position);
+    if (position) {
+      query = query.eq("position", position);
+    }
+
+    if (q) {
+      query = query.or(`full_name.ilike.%${q}%,email.ilike.%${q}%`);
+    }
+
+    const { data, error, count } = await query;
+    if (!error) {
+      const rows = (data || []) as unknown as Array<Record<string, unknown>>;
+      applicants = rows.map((applicant) => {
+        const citiesCoveredValue = applicant.cities_covered;
+
+        return {
+          id: String(applicant.id || ""),
+          full_name: String(applicant.full_name || ""),
+          email: String(applicant.email || ""),
+          phone: String(applicant.phone || ""),
+          city: typeof applicant.city === "string" ? applicant.city : null,
+          years_of_experience:
+            typeof applicant.years_of_experience === "number"
+              ? applicant.years_of_experience
+              : null,
+          country_covered:
+            typeof applicant.country_covered === "string" ? applicant.country_covered : null,
+          cities_covered: Array.isArray(citiesCoveredValue)
+            ? citiesCoveredValue.filter((value): value is string => typeof value === "string")
+            : null,
+          position: String(applicant.position || ""),
+          cover_letter: typeof applicant.cover_letter === "string" ? applicant.cover_letter : null,
+          cv_path: String(applicant.cv_path || ""),
+          cv_file_name: String(applicant.cv_file_name || ""),
+          identity_document_path:
+            typeof applicant.identity_document_path === "string"
+              ? applicant.identity_document_path
+              : null,
+          identity_document_file_name:
+            typeof applicant.identity_document_file_name === "string"
+              ? applicant.identity_document_file_name
+              : null,
+          created_at: String(applicant.created_at || "")
+        };
+      });
+      totalCount = count || 0;
+      loaded = true;
+      break;
+    }
+
+    const missingColumn = getMissingSchemaColumn(error.message);
+    if (!missingColumn || !OPTIONAL_APPLICATION_COLUMNS.includes(missingColumn)) {
+      throw new Error(`Failed to load applications: ${error.message}`);
+    }
+
+    selectColumns = selectColumns.filter((column) => column !== missingColumn);
   }
 
-  if (q) {
-    query = query.or(`full_name.ilike.%${q}%,email.ilike.%${q}%`);
+  if (!loaded) {
+    throw new Error("Failed to load applications.");
   }
-
-  const { data, error, count } = await query;
-
-  if (error) {
-    throw new Error(`Failed to load applications: ${error.message}`);
-  }
-
-  const applicants = (data || []) as ApplicationRow[];
-  const totalCount = count || 0;
 
   return (
     <main className="mx-auto flex min-h-screen w-full max-w-7xl flex-col gap-6 px-4 py-8 sm:px-6">
@@ -151,8 +237,26 @@ export default async function AdminPage({ searchParams }: AdminPageProps) {
                       <p className="font-semibold text-slate-900">{applicant.full_name}</p>
                       <p className="text-slate-600">{applicant.email}</p>
                     </td>
-                    <td className="px-4 py-4 text-sm text-slate-700">{applicant.position}</td>
-                    <td className="px-4 py-4 text-sm text-slate-700">{applicant.phone}</td>
+                    <td className="px-4 py-4 text-sm text-slate-700">
+                      <p>{applicant.position}</p>
+                      {applicant.years_of_experience !== null ? (
+                        <p className="text-xs text-slate-500">
+                          Experience: {applicant.years_of_experience} years
+                        </p>
+                      ) : null}
+                      {applicant.country_covered ? (
+                        <p className="text-xs text-slate-500">
+                          Coverage:{" "}
+                          {applicant.cities_covered && applicant.cities_covered.length > 0
+                            ? `${applicant.country_covered} (${applicant.cities_covered.join(", ")})`
+                            : applicant.country_covered}
+                        </p>
+                      ) : null}
+                    </td>
+                    <td className="px-4 py-4 text-sm text-slate-700">
+                      <p>{applicant.phone}</p>
+                      <p className="text-xs text-slate-500">City: {applicant.city || "N/A"}</p>
+                    </td>
                     <td className="px-4 py-4 text-sm text-slate-700">
                       {new Date(applicant.created_at).toLocaleString()}
                     </td>

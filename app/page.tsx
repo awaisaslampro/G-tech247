@@ -24,7 +24,6 @@ export default function ApplicationPage() {
           </div>
         </div>
       </section>
-
       <section className="rounded-2xl border border-slate-200 bg-white p-8 shadow-sm">
         <ApplicationForm />
       </section>
