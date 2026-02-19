@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { AdminLogoutButton } from "@/components/admin-logout-button";
-import { POSITION_OPTIONS } from "@/lib/constants";
+import { AdminFilters } from "@/components/admin-filters";
 import { isAdminAuthenticated } from "@/lib/admin-auth";
 import { getServiceSupabaseClient } from "@/lib/supabase/server";
 import { ApplicationRow } from "@/lib/types";
@@ -30,6 +30,48 @@ function getMissingSchemaColumn(errorMessage: string): string | null {
   }
 
   return null;
+}
+
+const APPLICATION_META_MARKER = "[APP_META_JSON]";
+
+type ApplicationMeta = {
+  city?: string;
+  years_of_experience?: number | null;
+  country_covered?: string | null;
+  cities_covered?: string[] | null;
+};
+
+function parseMetaFromCoverLetter(coverLetter: unknown): ApplicationMeta | null {
+  if (typeof coverLetter !== "string") {
+    return null;
+  }
+
+  const markerIndex = coverLetter.lastIndexOf(APPLICATION_META_MARKER);
+  if (markerIndex < 0) {
+    return null;
+  }
+
+  const rawJson = coverLetter.slice(markerIndex + APPLICATION_META_MARKER.length).trim();
+  if (!rawJson) {
+    return null;
+  }
+
+  try {
+    const parsed = JSON.parse(rawJson) as Record<string, unknown>;
+    const parsedCities = parsed.cities_covered;
+
+    return {
+      city: typeof parsed.city === "string" ? parsed.city : undefined,
+      years_of_experience:
+        typeof parsed.years_of_experience === "number" ? parsed.years_of_experience : null,
+      country_covered: typeof parsed.country_covered === "string" ? parsed.country_covered : null,
+      cities_covered: Array.isArray(parsedCities)
+        ? parsedCities.filter((value): value is string => typeof value === "string")
+        : null
+    };
+  } catch {
+    return null;
+  }
 }
 
 const BASE_APPLICATION_SELECT_COLUMNS = [
@@ -61,11 +103,13 @@ export default async function AdminPage({ searchParams }: AdminPageProps) {
 
   const params = await searchParams;
   const q = normalizeParam(params.q).trim();
-  const position = normalizeParam(params.position).trim();
+  const selectedCity = normalizeParam(params.city).trim();
+  const cityFilter = selectedCity.toLowerCase();
 
   const supabase = getServiceSupabaseClient();
   let selectColumns = [...BASE_APPLICATION_SELECT_COLUMNS, ...OPTIONAL_APPLICATION_COLUMNS];
   let applicants: ApplicationRow[] = [];
+  let cityOptions: string[] = [];
   let totalCount = 0;
   let loaded = false;
 
@@ -77,10 +121,6 @@ export default async function AdminPage({ searchParams }: AdminPageProps) {
       })
       .order("created_at", { ascending: false });
 
-    if (position) {
-      query = query.eq("position", position);
-    }
-
     if (q) {
       query = query.or(`full_name.ilike.%${q}%,email.ilike.%${q}%`);
     }
@@ -89,6 +129,7 @@ export default async function AdminPage({ searchParams }: AdminPageProps) {
     if (!error) {
       const rows = (data || []) as unknown as Array<Record<string, unknown>>;
       applicants = rows.map((applicant) => {
+        const parsedMeta = parseMetaFromCoverLetter(applicant.cover_letter);
         const citiesCoveredValue = applicant.cities_covered;
 
         return {
@@ -96,16 +137,18 @@ export default async function AdminPage({ searchParams }: AdminPageProps) {
           full_name: String(applicant.full_name || ""),
           email: String(applicant.email || ""),
           phone: String(applicant.phone || ""),
-          city: typeof applicant.city === "string" ? applicant.city : null,
+          city: typeof applicant.city === "string" ? applicant.city : (parsedMeta?.city ?? null),
           years_of_experience:
             typeof applicant.years_of_experience === "number"
               ? applicant.years_of_experience
-              : null,
+              : (parsedMeta?.years_of_experience ?? null),
           country_covered:
-            typeof applicant.country_covered === "string" ? applicant.country_covered : null,
+            typeof applicant.country_covered === "string"
+              ? applicant.country_covered
+              : (parsedMeta?.country_covered ?? null),
           cities_covered: Array.isArray(citiesCoveredValue)
             ? citiesCoveredValue.filter((value): value is string => typeof value === "string")
-            : null,
+            : (parsedMeta?.cities_covered ?? null),
           position: String(applicant.position || ""),
           cover_letter: typeof applicant.cover_letter === "string" ? applicant.cover_letter : null,
           cv_path: String(applicant.cv_path || ""),
@@ -121,7 +164,25 @@ export default async function AdminPage({ searchParams }: AdminPageProps) {
           created_at: String(applicant.created_at || "")
         };
       });
-      totalCount = count || 0;
+
+      const uniqueCities = new Set<string>();
+      for (const applicant of applicants) {
+        const candidateCity = (applicant.city || "").trim();
+        if (candidateCity) {
+          uniqueCities.add(candidateCity);
+        }
+      }
+      cityOptions = Array.from(uniqueCities).sort((first, second) => first.localeCompare(second));
+      if (selectedCity && !cityOptions.some((city) => city.toLowerCase() === cityFilter)) {
+        cityOptions = [...cityOptions, selectedCity].sort((first, second) =>
+          first.localeCompare(second)
+        );
+      }
+
+      if (cityFilter) {
+        applicants = applicants.filter((applicant) => (applicant.city || "").toLowerCase() === cityFilter);
+      }
+      totalCount = cityFilter ? applicants.length : count || 0;
       loaded = true;
       break;
     }
@@ -158,47 +219,7 @@ export default async function AdminPage({ searchParams }: AdminPageProps) {
       </section>
 
       <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-        <form className="grid gap-4 sm:grid-cols-[1fr_220px_auto]">
-          <label className="flex flex-col gap-2 text-sm font-medium text-slate-700">
-            Search by Name or Email
-            <input
-              className="h-11 rounded-lg border border-slate-300 px-3 text-slate-900 outline-none focus:border-brand-500"
-              defaultValue={q}
-              name="q"
-              placeholder="e.g. ali@example.com"
-              type="text"
-            />
-          </label>
-          <label className="flex flex-col gap-2 text-sm font-medium text-slate-700">
-            Filter by Position
-            <select
-              className="h-11 rounded-lg border border-slate-300 px-3 text-slate-900 outline-none focus:border-brand-500"
-              defaultValue={position}
-              name="position"
-            >
-              <option value="">All positions</option>
-              {POSITION_OPTIONS.map((item) => (
-                <option key={item} value={item}>
-                  {item}
-                </option>
-              ))}
-            </select>
-          </label>
-          <div className="flex items-end gap-2">
-            <button
-              className="inline-flex h-11 items-center rounded-lg bg-slate-900 px-4 text-sm font-semibold text-white transition hover:bg-slate-700"
-              type="submit"
-            >
-              Apply
-            </button>
-            <Link
-              className="inline-flex h-11 items-center rounded-lg border border-slate-300 px-4 text-sm font-semibold text-slate-700 transition hover:bg-slate-100"
-              href="/admin"
-            >
-              Reset
-            </Link>
-          </div>
-        </form>
+        <AdminFilters cityOptions={cityOptions} initialCity={selectedCity} initialQuery={q} />
       </section>
 
       <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
@@ -210,7 +231,7 @@ export default async function AdminPage({ searchParams }: AdminPageProps) {
                   Applicant
                 </th>
                 <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-600">
-                  Position
+                  City
                 </th>
                 <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-600">
                   Phone
@@ -237,25 +258,9 @@ export default async function AdminPage({ searchParams }: AdminPageProps) {
                       <p className="font-semibold text-slate-900">{applicant.full_name}</p>
                       <p className="text-slate-600">{applicant.email}</p>
                     </td>
+                    <td className="px-4 py-4 text-sm text-slate-700">{applicant.city || "N/A"}</td>
                     <td className="px-4 py-4 text-sm text-slate-700">
-                      <p>{applicant.position}</p>
-                      {applicant.years_of_experience !== null ? (
-                        <p className="text-xs text-slate-500">
-                          Experience: {applicant.years_of_experience} years
-                        </p>
-                      ) : null}
-                      {applicant.country_covered ? (
-                        <p className="text-xs text-slate-500">
-                          Coverage:{" "}
-                          {applicant.cities_covered && applicant.cities_covered.length > 0
-                            ? `${applicant.country_covered} (${applicant.cities_covered.join(", ")})`
-                            : applicant.country_covered}
-                        </p>
-                      ) : null}
-                    </td>
-                    <td className="px-4 py-4 text-sm text-slate-700">
-                      <p>{applicant.phone}</p>
-                      <p className="text-xs text-slate-500">City: {applicant.city || "N/A"}</p>
+                      {applicant.phone}
                     </td>
                     <td className="px-4 py-4 text-sm text-slate-700">
                       {new Date(applicant.created_at).toLocaleString()}

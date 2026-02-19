@@ -7,7 +7,7 @@ import {
   CITY_PROXIMITY_KM,
   COUNTRY_COVERAGE_OPTIONS,
   CountryCoverageOption,
-  POSITION_OPTIONS
+  POSITION_OPTIONS,
 } from "@/lib/constants";
 
 type FormState = {
@@ -21,7 +21,7 @@ function toRadians(value: number): number {
 
 function distanceInKm(
   first: { lat: number; lng: number },
-  second: { lat: number; lng: number }
+  second: { lat: number; lng: number },
 ): number {
   const earthRadiusKm = 6371;
   const deltaLat = toRadians(second.lat - first.lat);
@@ -31,14 +31,23 @@ function distanceInKm(
 
   const haversine =
     Math.sin(deltaLat / 2) * Math.sin(deltaLat / 2) +
-    Math.sin(deltaLng / 2) * Math.sin(deltaLng / 2) * Math.cos(lat1) * Math.cos(lat2);
+    Math.sin(deltaLng / 2) *
+      Math.sin(deltaLng / 2) *
+      Math.cos(lat1) *
+      Math.cos(lat2);
 
-  return 2 * earthRadiusKm * Math.atan2(Math.sqrt(haversine), Math.sqrt(1 - haversine));
+  return (
+    2 *
+    earthRadiusKm *
+    Math.atan2(Math.sqrt(haversine), Math.sqrt(1 - haversine))
+  );
 }
 
 export function ApplicationForm() {
   const [formState, setFormState] = useState<FormState>({ status: "idle" });
-  const [countryCovered, setCountryCovered] = useState<CountryCoverageOption | "">("");
+  const [countryCovered, setCountryCovered] = useState<
+    CountryCoverageOption | ""
+  >("");
   const [countryCities, setCountryCities] = useState<CityCoverageOption[]>([]);
   const [isLoadingCountryCities, setIsLoadingCountryCities] = useState(false);
   const [citiesLoadError, setCitiesLoadError] = useState<string | null>(null);
@@ -56,12 +65,17 @@ export function ApplicationForm() {
       .map((cityName) => cityMap.get(cityName))
       .filter(
         (
-          city
+          city,
         ): city is {
           name: string;
           lat: number;
           lng: number;
-        } => Boolean(city && typeof city.lat === "number" && typeof city.lng === "number")
+        } =>
+          Boolean(
+            city &&
+            typeof city.lat === "number" &&
+            typeof city.lng === "number",
+          ),
       );
     const blocked = new Set<string>();
 
@@ -75,7 +89,10 @@ export function ApplicationForm() {
           continue;
         }
 
-        if (distanceInKm(city, selectedCity) <= CITY_PROXIMITY_KM) {
+        if (
+          distanceInKm({ lat: city.lat, lng: city.lng }, selectedCity) <=
+          CITY_PROXIMITY_KM
+        ) {
           blocked.add(city.name);
           break;
         }
@@ -122,7 +139,7 @@ export function ApplicationForm() {
       try {
         const response = await fetch(
           `/api/cities?country=${encodeURIComponent(countryCovered)}`,
-          { method: "GET" }
+          { method: "GET" },
         );
         const payload = (await response.json()) as {
           cities?: CityCoverageOption[];
@@ -169,7 +186,9 @@ export function ApplicationForm() {
       return;
     }
 
-    const cityExists = availableCoverageCities.some((city) => city.name === selectedCityForCoverage);
+    const cityExists = availableCoverageCities.some(
+      (city) => city.name === selectedCityForCoverage,
+    );
     if (!cityExists) {
       setSelectedCityForCoverage(availableCoverageCities[0].name);
     }
@@ -200,7 +219,9 @@ export function ApplicationForm() {
   }
 
   function removeCoveredCity(cityName: string) {
-    setCitiesCovered((previous) => previous.filter((item) => item !== cityName));
+    setCitiesCovered((previous) =>
+      previous.filter((item) => item !== cityName),
+    );
   }
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
@@ -213,14 +234,14 @@ export function ApplicationForm() {
     try {
       const response = await fetch("/api/applications", {
         method: "POST",
-        body: formData
+        body: formData,
       });
       const data = (await response.json()) as { message?: string };
 
       if (!response.ok) {
         setFormState({
           status: "error",
-          message: data.message || "Failed to submit application."
+          message: data.message || "Failed to submit application.",
         });
         return;
       }
@@ -233,9 +254,15 @@ export function ApplicationForm() {
       setCountryCities([]);
       setCitiesLoadError(null);
       setIsLoadingCountryCities(false);
-      setFormState({ status: "success", message: "Application submitted successfully." });
+      setFormState({
+        status: "success",
+        message: "Application submitted successfully.",
+      });
     } catch {
-      setFormState({ status: "error", message: "Unexpected error while submitting form." });
+      setFormState({
+        status: "error",
+        message: "Unexpected error while submitting form.",
+      });
     }
   }
 
@@ -313,7 +340,7 @@ export function ApplicationForm() {
         </label>
 
         <label className="flex flex-col gap-2 text-sm font-medium text-slate-700">
-          Countries Covered (Optional)
+          Countries can Cover (Optional)
           <select
             className="h-11 rounded-lg border border-slate-300 px-3 text-slate-900 outline-none transition focus:border-brand-500"
             name="countryCovered"
@@ -332,7 +359,9 @@ export function ApplicationForm() {
 
       {countryCovered ? (
         <div className="space-y-3 rounded-lg border border-slate-200 bg-slate-50 p-4">
-          <p className="text-sm font-medium text-slate-700">Cities Covered (Optional)</p>
+          <p className="text-sm font-medium text-slate-700">
+            Cities can Cover (Optional)
+          </p>
           <div className="grid gap-3 sm:grid-cols-[1fr_1fr_auto]">
             <input
               className="h-11 rounded-lg border border-slate-300 px-3 text-slate-900 outline-none transition focus:border-brand-500"
@@ -344,7 +373,9 @@ export function ApplicationForm() {
             <select
               className="h-11 rounded-lg border border-slate-300 px-3 text-slate-900 outline-none transition focus:border-brand-500"
               disabled={isLoadingCountryCities}
-              onChange={(event) => setSelectedCityForCoverage(event.target.value)}
+              onChange={(event) =>
+                setSelectedCityForCoverage(event.target.value)
+              }
               value={selectedCityForCoverage}
             >
               {isLoadingCountryCities ? (
@@ -368,7 +399,9 @@ export function ApplicationForm() {
               Add City
             </button>
           </div>
-          {citiesLoadError ? <p className="text-xs text-amber-700">{citiesLoadError}</p> : null}
+          {citiesLoadError ? (
+            <p className="text-xs text-amber-700">{citiesLoadError}</p>
+          ) : null}
 
           {citiesCovered.length > 0 ? (
             <div className="flex flex-wrap gap-2">
@@ -395,7 +428,12 @@ export function ApplicationForm() {
       ) : null}
 
       {citiesCovered.map((cityName) => (
-        <input key={cityName} name="citiesCovered" type="hidden" value={cityName} />
+        <input
+          key={cityName}
+          name="citiesCovered"
+          type="hidden"
+          value={cityName}
+        />
       ))}
 
       <label className="flex flex-col gap-2 text-sm font-medium text-slate-700">
@@ -433,13 +471,17 @@ export function ApplicationForm() {
         disabled={formState.status === "submitting"}
         type="submit"
       >
-        {formState.status === "submitting" ? "Submitting..." : "Submit Application"}
+        {formState.status === "submitting"
+          ? "Submitting..."
+          : "Submit Application"}
       </button>
 
       {formState.message ? (
         <p
           className={`text-sm font-medium ${
-            formState.status === "success" ? "text-emerald-700" : "text-rose-700"
+            formState.status === "success"
+              ? "text-emerald-700"
+              : "text-rose-700"
           }`}
         >
           {formState.message}

@@ -136,6 +136,62 @@ function getMissingSchemaColumn(errorMessage: string): string | null {
   return null;
 }
 
+const APPLICATION_META_MARKER = "[APP_META_JSON]";
+
+type ApplicationMeta = {
+  city?: string;
+  years_of_experience?: number | null;
+  country_covered?: string | null;
+  cities_covered?: string[] | null;
+};
+
+function buildCoverLetterWithMeta(coverLetter: string, meta: ApplicationMeta): string {
+  const cleanedCoverLetter = coverLetter.trim();
+  const markerIndex = cleanedCoverLetter.lastIndexOf(APPLICATION_META_MARKER);
+  const originalCoverLetter =
+    markerIndex >= 0 ? cleanedCoverLetter.slice(0, markerIndex).trimEnd() : cleanedCoverLetter;
+  const metaJson = `${APPLICATION_META_MARKER}${JSON.stringify(meta)}`;
+
+  if (!originalCoverLetter) {
+    return metaJson;
+  }
+
+  return `${originalCoverLetter}\n\n${metaJson}`;
+}
+
+function parseMetaFromCoverLetter(coverLetter: unknown): ApplicationMeta | null {
+  if (typeof coverLetter !== "string") {
+    return null;
+  }
+
+  const markerIndex = coverLetter.lastIndexOf(APPLICATION_META_MARKER);
+  if (markerIndex < 0) {
+    return null;
+  }
+
+  const rawJson = coverLetter.slice(markerIndex + APPLICATION_META_MARKER.length).trim();
+  if (!rawJson) {
+    return null;
+  }
+
+  try {
+    const parsed = JSON.parse(rawJson) as Record<string, unknown>;
+    const parsedCities = parsed.cities_covered;
+
+    return {
+      city: typeof parsed.city === "string" ? parsed.city : undefined,
+      years_of_experience:
+        typeof parsed.years_of_experience === "number" ? parsed.years_of_experience : null,
+      country_covered: typeof parsed.country_covered === "string" ? parsed.country_covered : null,
+      cities_covered: Array.isArray(parsedCities)
+        ? parsedCities.filter((value): value is string => typeof value === "string")
+        : null
+    };
+  } catch {
+    return null;
+  }
+}
+
 const BASE_APPLICATION_SELECT_COLUMNS = [
   "id",
   "full_name",
@@ -279,6 +335,13 @@ export async function POST(request: Request) {
     country_covered: countryCovered,
     cities_covered: citiesCovered.length > 0 ? citiesCovered : null
   };
+  const applicationMeta: ApplicationMeta = {
+    city,
+    years_of_experience: yearsOfExperience,
+    country_covered: countryCovered,
+    cities_covered: citiesCovered.length > 0 ? citiesCovered : null
+  };
+  const coverLetterWithMeta = buildCoverLetterWithMeta(coverLetter, applicationMeta);
 
   const fallbackColumns = new Set([
     "city",
@@ -308,6 +371,7 @@ export async function POST(request: Request) {
       break;
     }
 
+    payloadForInsert.cover_letter = coverLetterWithMeta;
     delete payloadForInsert[missingColumn];
     droppedColumns.push(missingColumn);
     insertError = error;
@@ -370,6 +434,7 @@ export async function GET(request: Request) {
     if (!error) {
       const applicants = (data || []).map((row) => {
         const applicant = (row || {}) as unknown as Record<string, unknown>;
+        const parsedMeta = parseMetaFromCoverLetter(applicant.cover_letter);
         const cityValue = applicant.city;
         const yearsOfExperienceValue = applicant.years_of_experience;
         const countryCoveredValue = applicant.country_covered;
@@ -377,13 +442,18 @@ export async function GET(request: Request) {
 
         return {
           ...applicant,
-          city: typeof cityValue === "string" ? cityValue : null,
+          city: typeof cityValue === "string" ? cityValue : (parsedMeta?.city ?? null),
           years_of_experience:
-            typeof yearsOfExperienceValue === "number" ? yearsOfExperienceValue : null,
-          country_covered: typeof countryCoveredValue === "string" ? countryCoveredValue : null,
+            typeof yearsOfExperienceValue === "number"
+              ? yearsOfExperienceValue
+              : (parsedMeta?.years_of_experience ?? null),
+          country_covered:
+            typeof countryCoveredValue === "string"
+              ? countryCoveredValue
+              : (parsedMeta?.country_covered ?? null),
           cities_covered: Array.isArray(citiesCoveredValue)
             ? citiesCoveredValue.filter((value): value is string => typeof value === "string")
-            : null
+            : (parsedMeta?.cities_covered ?? null)
         };
       });
 
