@@ -3,6 +3,24 @@ export const POSITION_OPTIONS = [
   "Network Engineer",
 ];
 
+export const CERTIFICATION_OPTIONS = [
+  "CCNA (Cisco Certified Network Associate)",
+  "CCNP (Cisco Certified Network Professional)",
+  "CCIE (Cisco Certified Internetwork Expert)",
+  "CompTIA Network+",
+  "CompTIA Security+",
+  "JNCIA-Junos (Juniper)",
+  "JNCIS / JNCIP (Juniper)",
+  "AWS Advanced Networking",
+  "Azure Network Engineer Associate",
+  "Palo Alto PCNSE",
+  "Fortinet NSE 4-7",
+  "Aruba ACMA / ACMP",
+  "CWNA (Certified Wireless Network Administrator)",
+] as const;
+
+export type CertificationOption = (typeof CERTIFICATION_OPTIONS)[number];
+
 export type CityCoverageOption = {
   name: string;
   lat?: number;

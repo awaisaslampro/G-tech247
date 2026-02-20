@@ -36,6 +36,7 @@ const APPLICATION_META_MARKER = "[APP_META_JSON]";
 
 type ApplicationMeta = {
   city?: string;
+  certification?: string | null;
   years_of_experience?: number | null;
   country_covered?: string | null;
   cities_covered?: string[] | null;
@@ -62,6 +63,7 @@ function parseMetaFromCoverLetter(coverLetter: unknown): ApplicationMeta | null 
 
     return {
       city: typeof parsed.city === "string" ? parsed.city : undefined,
+      certification: typeof parsed.certification === "string" ? parsed.certification : null,
       years_of_experience:
         typeof parsed.years_of_experience === "number" ? parsed.years_of_experience : null,
       country_covered: typeof parsed.country_covered === "string" ? parsed.country_covered : null,
@@ -90,6 +92,7 @@ const BASE_APPLICATION_SELECT_COLUMNS = [
 
 const OPTIONAL_APPLICATION_COLUMNS = [
   "city",
+  "certification",
   "years_of_experience",
   "country_covered",
   "cities_covered"
@@ -130,6 +133,7 @@ export default async function AdminPage({ searchParams }: AdminPageProps) {
       const rows = (data || []) as unknown as Array<Record<string, unknown>>;
       applicants = rows.map((applicant) => {
         const parsedMeta = parseMetaFromCoverLetter(applicant.cover_letter);
+        const certificationValue = applicant.certification;
         const citiesCoveredValue = applicant.cities_covered;
 
         return {
@@ -138,6 +142,10 @@ export default async function AdminPage({ searchParams }: AdminPageProps) {
           email: String(applicant.email || ""),
           phone: String(applicant.phone || ""),
           city: typeof applicant.city === "string" ? applicant.city : (parsedMeta?.city ?? null),
+          certification:
+            typeof certificationValue === "string"
+              ? certificationValue
+              : (parsedMeta?.certification ?? null),
           years_of_experience:
             typeof applicant.years_of_experience === "number"
               ? applicant.years_of_experience
@@ -234,6 +242,9 @@ export default async function AdminPage({ searchParams }: AdminPageProps) {
                   City
                 </th>
                 <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-600">
+                  Certification
+                </th>
+                <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-600">
                   Phone
                 </th>
                 <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-600">
@@ -247,7 +258,7 @@ export default async function AdminPage({ searchParams }: AdminPageProps) {
             <tbody className="divide-y divide-slate-100">
               {applicants.length === 0 ? (
                 <tr>
-                  <td className="px-4 py-8 text-center text-sm text-slate-500" colSpan={5}>
+                  <td className="px-4 py-8 text-center text-sm text-slate-500" colSpan={6}>
                     No applicants found for your current filter.
                   </td>
                 </tr>
@@ -259,6 +270,9 @@ export default async function AdminPage({ searchParams }: AdminPageProps) {
                       <p className="text-slate-600">{applicant.email}</p>
                     </td>
                     <td className="px-4 py-4 text-sm text-slate-700">{applicant.city || "N/A"}</td>
+                    <td className="px-4 py-4 text-sm text-slate-700">
+                      {applicant.certification || "N/A"}
+                    </td>
                     <td className="px-4 py-4 text-sm text-slate-700">
                       {applicant.phone}
                     </td>

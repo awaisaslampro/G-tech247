@@ -2,7 +2,9 @@ import { NextResponse } from "next/server";
 import {
   ALLOWED_CV_TYPES,
   ALLOWED_IDENTITY_DOCUMENT_TYPES,
+  CERTIFICATION_OPTIONS,
   CITIES_BY_COUNTRY,
+  CertificationOption,
   CITY_PROXIMITY_KM,
   COUNTRY_COVERAGE_OPTIONS,
   CountryCoverageOption,
@@ -76,6 +78,10 @@ function isCountryCoverageOption(value: string): value is CountryCoverageOption 
   return COUNTRY_COVERAGE_OPTIONS.includes(value as CountryCoverageOption);
 }
 
+function isCertificationOption(value: string): value is CertificationOption {
+  return CERTIFICATION_OPTIONS.includes(value as CertificationOption);
+}
+
 function validateCitiesCoverage(
   countryCovered: CountryCoverageOption | null,
   citiesCovered: string[]
@@ -140,6 +146,7 @@ const APPLICATION_META_MARKER = "[APP_META_JSON]";
 
 type ApplicationMeta = {
   city?: string;
+  certification?: string | null;
   years_of_experience?: number | null;
   country_covered?: string | null;
   cities_covered?: string[] | null;
@@ -180,6 +187,7 @@ function parseMetaFromCoverLetter(coverLetter: unknown): ApplicationMeta | null 
 
     return {
       city: typeof parsed.city === "string" ? parsed.city : undefined,
+      certification: typeof parsed.certification === "string" ? parsed.certification : null,
       years_of_experience:
         typeof parsed.years_of_experience === "number" ? parsed.years_of_experience : null,
       country_covered: typeof parsed.country_covered === "string" ? parsed.country_covered : null,
@@ -208,6 +216,7 @@ const BASE_APPLICATION_SELECT_COLUMNS = [
 
 const OPTIONAL_APPLICATION_COLUMNS = [
   "city",
+  "certification",
   "years_of_experience",
   "country_covered",
   "cities_covered"
@@ -220,6 +229,7 @@ export async function POST(request: Request) {
   const phone = String(formData.get("phone") || "").trim();
   const city = String(formData.get("city") || "").trim();
   const position = String(formData.get("position") || "").trim();
+  const certificationRaw = String(formData.get("certification") || "").trim();
   const yearsOfExperienceRaw = String(formData.get("yearsOfExperience") || "").trim();
   const countryCoveredRaw = String(formData.get("countryCovered") || "").trim();
   const citiesCovered = formData
@@ -235,6 +245,16 @@ export async function POST(request: Request) {
   }
 
   let yearsOfExperience: number | null = null;
+  let certification: CertificationOption | null = null;
+
+  if (certificationRaw) {
+    if (!isCertificationOption(certificationRaw)) {
+      return NextResponse.json({ message: "Invalid certification selected." }, { status: 400 });
+    }
+
+    certification = certificationRaw;
+  }
+
   if (yearsOfExperienceRaw) {
     const parsedYears = Number(yearsOfExperienceRaw);
     if (!Number.isFinite(parsedYears) || parsedYears < 0) {
@@ -331,12 +351,14 @@ export async function POST(request: Request) {
   const insertPayload: Record<string, unknown> = {
     ...baseInsertPayload,
     city,
+    certification,
     years_of_experience: yearsOfExperience,
     country_covered: countryCovered,
     cities_covered: citiesCovered.length > 0 ? citiesCovered : null
   };
   const applicationMeta: ApplicationMeta = {
     city,
+    certification,
     years_of_experience: yearsOfExperience,
     country_covered: countryCovered,
     cities_covered: citiesCovered.length > 0 ? citiesCovered : null
@@ -345,6 +367,7 @@ export async function POST(request: Request) {
 
   const fallbackColumns = new Set([
     "city",
+    "certification",
     "years_of_experience",
     "country_covered",
     "cities_covered"
@@ -436,6 +459,7 @@ export async function GET(request: Request) {
         const applicant = (row || {}) as unknown as Record<string, unknown>;
         const parsedMeta = parseMetaFromCoverLetter(applicant.cover_letter);
         const cityValue = applicant.city;
+        const certificationValue = applicant.certification;
         const yearsOfExperienceValue = applicant.years_of_experience;
         const countryCoveredValue = applicant.country_covered;
         const citiesCoveredValue = applicant.cities_covered;
@@ -443,6 +467,10 @@ export async function GET(request: Request) {
         return {
           ...applicant,
           city: typeof cityValue === "string" ? cityValue : (parsedMeta?.city ?? null),
+          certification:
+            typeof certificationValue === "string"
+              ? certificationValue
+              : (parsedMeta?.certification ?? null),
           years_of_experience:
             typeof yearsOfExperienceValue === "number"
               ? yearsOfExperienceValue

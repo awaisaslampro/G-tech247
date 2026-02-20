@@ -2,6 +2,7 @@
 
 import { ChangeEvent, FormEvent, useEffect, useMemo, useState } from "react";
 import {
+  CERTIFICATION_OPTIONS,
   CITIES_BY_COUNTRY,
   CityCoverageOption,
   CITY_PROXIMITY_KM,
@@ -334,6 +335,22 @@ export function ApplicationForm() {
             {POSITION_OPTIONS.map((position) => (
               <option key={position} value={position}>
                 {position}
+              </option>
+            ))}
+          </select>
+        </label>
+
+        <label className="flex flex-col gap-2 text-sm font-medium text-slate-700">
+          Certification (Optional)
+          <select
+            className="h-11 rounded-lg border border-slate-300 px-3 text-slate-900 outline-none transition focus:border-brand-500"
+            defaultValue=""
+            name="certification"
+          >
+            <option value="">Select a certification</option>
+            {CERTIFICATION_OPTIONS.map((certification) => (
+              <option key={certification} value={certification}>
+                {certification}
               </option>
             ))}
           </select>

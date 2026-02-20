@@ -6,6 +6,7 @@ create table if not exists public.applications (
   email text not null,
   phone text not null,
   city text not null,
+  certification text null,
   position text not null,
   years_of_experience double precision null,
   country_covered text null,
@@ -21,6 +22,7 @@ create table if not exists public.applications (
 alter table public.applications add column if not exists identity_document_path text;
 alter table public.applications add column if not exists identity_document_file_name text;
 alter table public.applications add column if not exists city text;
+alter table public.applications add column if not exists certification text;
 alter table public.applications add column if not exists years_of_experience double precision;
 alter table public.applications add column if not exists country_covered text;
 alter table public.applications add column if not exists cities_covered jsonb;
