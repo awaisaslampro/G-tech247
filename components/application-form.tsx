@@ -6,6 +6,7 @@ import {
   CITIES_BY_COUNTRY,
   CityCoverageOption,
   CITY_PROXIMITY_KM,
+  CertificationOption,
   COUNTRY_COVERAGE_OPTIONS,
   CountryCoverageOption,
   POSITION_OPTIONS,
@@ -46,6 +47,12 @@ function distanceInKm(
 
 export function ApplicationForm() {
   const [formState, setFormState] = useState<FormState>({ status: "idle" });
+  const [selectedCertification, setSelectedCertification] = useState<
+    CertificationOption | ""
+  >("");
+  const [certifications, setCertifications] = useState<CertificationOption[]>(
+    [],
+  );
   const [countryCovered, setCountryCovered] = useState<
     CountryCoverageOption | ""
   >("");
@@ -123,6 +130,14 @@ export function ApplicationForm() {
     });
   }, [blockedCityNames, citiesCovered, citySearch, countryCities]);
 
+  const availableCertifications = useMemo(
+    () =>
+      CERTIFICATION_OPTIONS.filter(
+        (certification) => !certifications.includes(certification),
+      ),
+    [certifications],
+  );
+
   useEffect(() => {
     let cancelled = false;
 
@@ -195,6 +210,20 @@ export function ApplicationForm() {
     }
   }, [availableCoverageCities, selectedCityForCoverage]);
 
+  useEffect(() => {
+    if (availableCertifications.length === 0) {
+      setSelectedCertification("");
+      return;
+    }
+
+    const certificationExists =
+      selectedCertification !== "" &&
+      availableCertifications.includes(selectedCertification);
+    if (!certificationExists) {
+      setSelectedCertification(availableCertifications[0]);
+    }
+  }, [availableCertifications, selectedCertification]);
+
   function handleCountryCoveredChange(event: ChangeEvent<HTMLSelectElement>) {
     const nextCountry = event.target.value as CountryCoverageOption | "";
     setCountryCovered(nextCountry);
@@ -217,6 +246,26 @@ export function ApplicationForm() {
       }
       return [...previous, selectedCityForCoverage];
     });
+  }
+
+  function addCertification() {
+    if (!selectedCertification) {
+      return;
+    }
+
+    setCertifications((previous) => {
+      if (previous.includes(selectedCertification)) {
+        return previous;
+      }
+
+      return [...previous, selectedCertification];
+    });
+  }
+
+  function removeCertification(certificationName: CertificationOption) {
+    setCertifications((previous) =>
+      previous.filter((item) => item !== certificationName),
+    );
   }
 
   function removeCoveredCity(cityName: string) {
@@ -248,6 +297,8 @@ export function ApplicationForm() {
       }
 
       form.reset();
+      setSelectedCertification("");
+      setCertifications([]);
       setCountryCovered("");
       setCitySearch("");
       setSelectedCityForCoverage("");
@@ -340,21 +391,63 @@ export function ApplicationForm() {
           </select>
         </label>
 
-        <label className="flex flex-col gap-2 text-sm font-medium text-slate-700">
-          Certification (Optional)
-          <select
-            className="h-11 rounded-lg border border-slate-300 px-3 text-slate-900 outline-none transition focus:border-brand-500"
-            defaultValue=""
-            name="certification"
-          >
-            <option value="">Select a certification</option>
-            {CERTIFICATION_OPTIONS.map((certification) => (
-              <option key={certification} value={certification}>
-                {certification}
-              </option>
-            ))}
-          </select>
-        </label>
+        <div className="space-y-2 sm:col-span-2">
+          <p className="text-sm font-medium text-slate-700">
+            Certifications (Optional)
+          </p>
+          <div className="grid gap-3 sm:grid-cols-[1fr_auto]">
+            <select
+              className="h-11 rounded-lg border border-slate-300 px-3 text-slate-900 outline-none transition focus:border-brand-500"
+              onChange={(event) =>
+                setSelectedCertification(
+                  event.target.value as CertificationOption | "",
+                )
+              }
+              value={selectedCertification}
+            >
+              {availableCertifications.length === 0 ? (
+                <option value="">No certifications available</option>
+              ) : (
+                availableCertifications.map((certification) => (
+                  <option key={certification} value={certification}>
+                    {certification}
+                  </option>
+                ))
+              )}
+            </select>
+            <button
+              className="inline-flex h-11 items-center justify-center rounded-lg border border-slate-300 px-4 text-sm font-semibold text-slate-700 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-60"
+              disabled={!selectedCertification}
+              onClick={addCertification}
+              type="button"
+            >
+              Add Certification
+            </button>
+          </div>
+          {certifications.length > 0 ? (
+            <div className="flex flex-wrap gap-2">
+              {certifications.map((certificationName) => (
+                <div
+                  key={certificationName}
+                  className="inline-flex items-center gap-2 rounded-full bg-brand-50 px-3 py-1 text-sm font-medium text-brand-800"
+                >
+                  <span>{certificationName}</span>
+                  <button
+                    className="text-brand-900 transition hover:text-brand-700"
+                    onClick={() => removeCertification(certificationName)}
+                    type="button"
+                  >
+                    Remove
+                  </button>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p className="text-xs text-slate-500">
+              No certification selected yet.
+            </p>
+          )}
+        </div>
 
         <label className="flex flex-col gap-2 text-sm font-medium text-slate-700">
           Countries can Cover (Optional)
@@ -450,6 +543,15 @@ export function ApplicationForm() {
           name="citiesCovered"
           type="hidden"
           value={cityName}
+        />
+      ))}
+
+      {certifications.map((certificationName) => (
+        <input
+          key={certificationName}
+          name="certifications"
+          type="hidden"
+          value={certificationName}
         />
       ))}
 

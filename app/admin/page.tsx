@@ -36,6 +36,7 @@ const APPLICATION_META_MARKER = "[APP_META_JSON]";
 
 type ApplicationMeta = {
   city?: string;
+  certifications?: string[] | null;
   certification?: string | null;
   years_of_experience?: number | null;
   country_covered?: string | null;
@@ -60,9 +61,13 @@ function parseMetaFromCoverLetter(coverLetter: unknown): ApplicationMeta | null 
   try {
     const parsed = JSON.parse(rawJson) as Record<string, unknown>;
     const parsedCities = parsed.cities_covered;
+    const parsedCertifications = parsed.certifications;
 
     return {
       city: typeof parsed.city === "string" ? parsed.city : undefined,
+      certifications: Array.isArray(parsedCertifications)
+        ? parsedCertifications.filter((value): value is string => typeof value === "string")
+        : null,
       certification: typeof parsed.certification === "string" ? parsed.certification : null,
       years_of_experience:
         typeof parsed.years_of_experience === "number" ? parsed.years_of_experience : null,
@@ -92,6 +97,7 @@ const BASE_APPLICATION_SELECT_COLUMNS = [
 
 const OPTIONAL_APPLICATION_COLUMNS = [
   "city",
+  "certifications",
   "certification",
   "years_of_experience",
   "country_covered",
@@ -133,8 +139,23 @@ export default async function AdminPage({ searchParams }: AdminPageProps) {
       const rows = (data || []) as unknown as Array<Record<string, unknown>>;
       applicants = rows.map((applicant) => {
         const parsedMeta = parseMetaFromCoverLetter(applicant.cover_letter);
+        const certificationsValue = applicant.certifications;
         const certificationValue = applicant.certification;
         const citiesCoveredValue = applicant.cities_covered;
+        const normalizedCertifications = Array.isArray(certificationsValue)
+          ? certificationsValue.filter((value): value is string => typeof value === "string")
+          : parsedMeta?.certifications ??
+            (typeof certificationValue === "string"
+              ? [certificationValue]
+              : parsedMeta?.certification
+                ? [parsedMeta.certification]
+                : null);
+        const normalizedPrimaryCertification =
+          normalizedCertifications && normalizedCertifications.length > 0
+            ? normalizedCertifications[0]
+            : typeof certificationValue === "string"
+              ? certificationValue
+              : (parsedMeta?.certification ?? null);
 
         return {
           id: String(applicant.id || ""),
@@ -142,10 +163,8 @@ export default async function AdminPage({ searchParams }: AdminPageProps) {
           email: String(applicant.email || ""),
           phone: String(applicant.phone || ""),
           city: typeof applicant.city === "string" ? applicant.city : (parsedMeta?.city ?? null),
-          certification:
-            typeof certificationValue === "string"
-              ? certificationValue
-              : (parsedMeta?.certification ?? null),
+          certifications: normalizedCertifications,
+          certification: normalizedPrimaryCertification,
           years_of_experience:
             typeof applicant.years_of_experience === "number"
               ? applicant.years_of_experience
@@ -242,7 +261,7 @@ export default async function AdminPage({ searchParams }: AdminPageProps) {
                   City
                 </th>
                 <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-600">
-                  Certification
+                  Certifications
                 </th>
                 <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-600">
                   Phone
@@ -271,7 +290,9 @@ export default async function AdminPage({ searchParams }: AdminPageProps) {
                     </td>
                     <td className="px-4 py-4 text-sm text-slate-700">{applicant.city || "N/A"}</td>
                     <td className="px-4 py-4 text-sm text-slate-700">
-                      {applicant.certification || "N/A"}
+                      {applicant.certifications && applicant.certifications.length > 0
+                        ? applicant.certifications.join(", ")
+                        : (applicant.certification || "N/A")}
                     </td>
                     <td className="px-4 py-4 text-sm text-slate-700">
                       {applicant.phone}

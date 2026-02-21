@@ -4,6 +4,7 @@ export type ApplicationRow = {
   email: string;
   phone: string;
   city: string | null;
+  certifications: string[] | null;
   certification: string | null;
   years_of_experience: number | null;
   country_covered: string | null;

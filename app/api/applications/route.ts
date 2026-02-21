@@ -146,6 +146,7 @@ const APPLICATION_META_MARKER = "[APP_META_JSON]";
 
 type ApplicationMeta = {
   city?: string;
+  certifications?: string[] | null;
   certification?: string | null;
   years_of_experience?: number | null;
   country_covered?: string | null;
@@ -184,9 +185,13 @@ function parseMetaFromCoverLetter(coverLetter: unknown): ApplicationMeta | null 
   try {
     const parsed = JSON.parse(rawJson) as Record<string, unknown>;
     const parsedCities = parsed.cities_covered;
+    const parsedCertifications = parsed.certifications;
 
     return {
       city: typeof parsed.city === "string" ? parsed.city : undefined,
+      certifications: Array.isArray(parsedCertifications)
+        ? parsedCertifications.filter((value): value is string => typeof value === "string")
+        : null,
       certification: typeof parsed.certification === "string" ? parsed.certification : null,
       years_of_experience:
         typeof parsed.years_of_experience === "number" ? parsed.years_of_experience : null,
@@ -216,6 +221,7 @@ const BASE_APPLICATION_SELECT_COLUMNS = [
 
 const OPTIONAL_APPLICATION_COLUMNS = [
   "city",
+  "certifications",
   "certification",
   "years_of_experience",
   "country_covered",
@@ -230,6 +236,10 @@ export async function POST(request: Request) {
   const city = String(formData.get("city") || "").trim();
   const position = String(formData.get("position") || "").trim();
   const certificationRaw = String(formData.get("certification") || "").trim();
+  const certificationsRaw = formData
+    .getAll("certifications")
+    .map((value) => String(value || "").trim())
+    .filter(Boolean);
   const yearsOfExperienceRaw = String(formData.get("yearsOfExperience") || "").trim();
   const countryCoveredRaw = String(formData.get("countryCovered") || "").trim();
   const citiesCovered = formData
@@ -245,15 +255,18 @@ export async function POST(request: Request) {
   }
 
   let yearsOfExperience: number | null = null;
-  let certification: CertificationOption | null = null;
+  const certifications = Array.from(
+    new Set([...certificationsRaw, ...(certificationRaw ? [certificationRaw] : [])])
+  );
 
-  if (certificationRaw) {
-    if (!isCertificationOption(certificationRaw)) {
-      return NextResponse.json({ message: "Invalid certification selected." }, { status: 400 });
-    }
-
-    certification = certificationRaw;
+  if (
+    certifications.some((certificationValue) => !isCertificationOption(certificationValue))
+  ) {
+    return NextResponse.json({ message: "Invalid certification selected." }, { status: 400 });
   }
+
+  const normalizedCertifications = certifications as CertificationOption[];
+  const primaryCertification = normalizedCertifications[0] || null;
 
   if (yearsOfExperienceRaw) {
     const parsedYears = Number(yearsOfExperienceRaw);
@@ -351,14 +364,16 @@ export async function POST(request: Request) {
   const insertPayload: Record<string, unknown> = {
     ...baseInsertPayload,
     city,
-    certification,
+    certifications: normalizedCertifications.length > 0 ? normalizedCertifications : null,
+    certification: primaryCertification,
     years_of_experience: yearsOfExperience,
     country_covered: countryCovered,
     cities_covered: citiesCovered.length > 0 ? citiesCovered : null
   };
   const applicationMeta: ApplicationMeta = {
     city,
-    certification,
+    certifications: normalizedCertifications.length > 0 ? normalizedCertifications : null,
+    certification: primaryCertification,
     years_of_experience: yearsOfExperience,
     country_covered: countryCovered,
     cities_covered: citiesCovered.length > 0 ? citiesCovered : null
@@ -367,6 +382,7 @@ export async function POST(request: Request) {
 
   const fallbackColumns = new Set([
     "city",
+    "certifications",
     "certification",
     "years_of_experience",
     "country_covered",
@@ -459,18 +475,31 @@ export async function GET(request: Request) {
         const applicant = (row || {}) as unknown as Record<string, unknown>;
         const parsedMeta = parseMetaFromCoverLetter(applicant.cover_letter);
         const cityValue = applicant.city;
+        const certificationsValue = applicant.certifications;
         const certificationValue = applicant.certification;
         const yearsOfExperienceValue = applicant.years_of_experience;
         const countryCoveredValue = applicant.country_covered;
         const citiesCoveredValue = applicant.cities_covered;
+        const normalizedCertifications = Array.isArray(certificationsValue)
+          ? certificationsValue.filter((value): value is string => typeof value === "string")
+          : parsedMeta?.certifications ??
+            (typeof certificationValue === "string"
+              ? [certificationValue]
+              : parsedMeta?.certification
+                ? [parsedMeta.certification]
+                : null);
+        const normalizedPrimaryCertification =
+          normalizedCertifications && normalizedCertifications.length > 0
+            ? normalizedCertifications[0]
+            : typeof certificationValue === "string"
+              ? certificationValue
+              : parsedMeta?.certification ?? null;
 
         return {
           ...applicant,
           city: typeof cityValue === "string" ? cityValue : (parsedMeta?.city ?? null),
-          certification:
-            typeof certificationValue === "string"
-              ? certificationValue
-              : (parsedMeta?.certification ?? null),
+          certifications: normalizedCertifications,
+          certification: normalizedPrimaryCertification,
           years_of_experience:
             typeof yearsOfExperienceValue === "number"
               ? yearsOfExperienceValue
